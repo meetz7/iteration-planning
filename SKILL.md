@@ -215,85 +215,96 @@ scan_controller → scan_service → payment_gateway
 
 执行结束后，生成结构化文档到项目目录（如 `docs/iteration-{date}/`）。
 
-文档特点：
-- **精确性** — 文件路径、函数名、行号精确标注
-- **结构化** — 表格形式，便于 AI 解析
-- **可执行性** — 包含改动前后代码对比，按文档可精确复现
-- **完整性** — 覆盖所有改动项，无遗漏
+**混合格式方案：**
+
+| 文件 | 格式 | 用途 |
+|------|------|------|
+| `CHANGELOG.json` | JSON | AI 定位改动项，字段精确，解析不出错 |
+| `IMPLEMENTATION_GUIDE.json` | JSON | AI 执行核心依据，改动前后代码精确对比 |
+| `IMPACT_ANALYSIS.md` | Markdown | 代码结构说明，人类和 AI 都能看 |
+| `EXECUTION_LOG.json` | JSON | 执行状态追溯，字段精确 |
 
 ---
 
-#### 1. 改动清单文档
+#### 1. 改动清单（JSON）
 
-**文件：** `CHANGELOG.md`
+**文件：** `CHANGELOG.json`
 
-**用途：** AI 快速定位所有改动项，按清单逐项执行
+**用途：** AI 快速定位所有改动项，JSON 格式确保字段不漏
 
-**内容：**
-```markdown
-# 改动清单
+**JSON Schema：**
 
-**项目：** xxx
-**日期：** 2026-04-28
-**触发方向：** 被扫接口加日志
-
----
-
-## 改动项
-
-| # | 改动项 | 类型 | 位置 | 状态 |
-|---|--------|------|------|------|
-| 1 | 新增日志记录参数 | 新增 | scan_controller.ts:handleScan():20 | 已完成 |
-| 2 | 参数结构新增logId | 修改 | scan_service.ts:process() | 已完成 |
-
----
-
-## 执行顺序
-
-1. #1 — 无依赖，优先执行
-2. #2 — 依赖 #1 的 logId
-3. #3 — 依赖 #2 的参数结构
+```json
+{
+  "changelog": {
+    "project": "{项目名}",
+    "date": "{YYYY-MM-DD}",
+    "trigger_direction": "{触发方向：用户原始描述}",
+    "items": [
+      {
+        "id": 1,
+        "description": "{改动项描述}",
+        "type": "新增|修改|删除",
+        "location": {
+          "file": "{文件路径}",
+          "function": "{函数名}",
+          "line": {行号或null}
+        },
+        "status": "待执行|已完成|阻塞",
+        "depends_on": {依赖的改动项ID或null}
+      }
+    ],
+    "execution_order": [
+      {
+        "id": 1,
+        "reason": "无依赖，优先执行"
+      },
+      {
+        "id": 2,
+        "reason": "依赖 #1 的 {具体依赖内容}"
+      }
+    ]
+  }
+}
 ```
 
+**AI 执行要求：**
+- 读取 `items` 数组，按 `execution_order` 顺序执行
+- 每项执行时，用 `location.file` + `location.function` + `location.line` 精确定位
+- 执行后更新 `status` 字段
+
 ---
 
-#### 2. 影响范围分析文档
+#### 2. 影响范围分析（Markdown）
 
 **文件：** `IMPACT_ANALYSIS.md`
 
 **用途：** AI 理解代码结构和依赖关系，确保改动不遗漏调用方
 
-**关键信息（AI 必读）：**
-- 调用链路径（从入口到底层）
-- 上游调用方列表（改动返回值需同步）
-- 下游依赖列表（改动参数需同步）
-- 边界条件（异常处理、并发场景）
+**保持 Markdown 格式的原因：**
+- 代码结构说明需要代码块展示
+- 调用链需要树形结构展示
+- 人类和 AI 都需要能直接阅读
 
-**内容：**
+**内容结构：**
+
 ```markdown
 # 影响范围分析
 
 ## 代码结构
 
-### scan_controller.ts
-- handleScan() — 入口，处理被扫请求
-- 参数：ScanRequest { merchantId, amount, deviceId }
-- 返回：ScanResponse { orderId, status }
-
-### scan_service.ts
-- process() — 处理逻辑
-- 调用 payment_gateway.scan()
+### {文件名}
+- {函数名}() — {用途说明}
+- 参数：{参数结构}
+- 返回：{返回值结构}
 
 ---
 
 ## 调用链
 
-```
-api/routes.ts:scanRoute()
-  → scan_controller.ts:handleScan()
-    → scan_service.ts:process()
-      → payment_gateway.scan()
-```
+{入口函数}()
+  → {中层函数}()
+    → {底层函数}()
 
 ---
 
@@ -301,8 +312,7 @@ api/routes.ts:scanRoute()
 
 | 文件 | 函数 | 影响说明 |
 |------|------|----------|
-| api/routes.ts | scanRoute() | 需传递 logId |
-| tests/scan_controller_test.ts | test_handleScan | 需更新测试数据 |
+| {文件路径} | {函数名} | {需同步的改动} |
 
 ---
 
@@ -310,259 +320,152 @@ api/routes.ts:scanRoute()
 
 | 文件 | 函数 | 影响说明 |
 |------|------|----------|
-| scan_service.ts | process() | 参数新增 logId |
+| {文件路径} | {函数名} | {需同步的改动} |
 
 ---
 
 ## 边界条件
 
-- 并发场景：同一订单重复扫描 → 无影响（logId 由调用方生成）
-- 异常处理：payment_gateway 超时 → 日志已记录，无影响
-
----
-
-## 改动后代码说明
-
-### {函数名}() 改动后
-
-```pseudo
-// 改动前
-function {函数名}({参数}) {
-    {原有逻辑}
-    return {返回值}
-}
-
-// 改动后
-function {函数名}({参数}) {
-    {新增逻辑}  // ← 新增
-    {原有逻辑}
-    return {返回值}
-}
+- {场景1}：{处理方式}
+- {场景2}：{处理方式}
 ```
-
-### {数据结构} 改动后
-
-```pseudo
-// 改动前
-struct/interface/class {数据结构名} {
-    {字段1}
-    {字段2}
-    {字段3}
-}
-
-// 改动后
-struct/interface/class {数据结构名} {
-    {字段1}
-    {字段2}
-    {字段3}
-    {新增字段}  // ← 新增
-}
-```
-```
-
----
-
-#### 3. 执行记录文档
-
-**文件：** `EXECUTION_LOG.md`
-
-**用途：** AI 回溯执行状态，确认哪些已完成、哪些阻塞
-
-**内容：**
-```markdown
-# 执行记录
-
-## 2026-04-28 iteration-planning 执行
-
-**总项数：** 4
-**已完成：** 4
-**耗时：** 15 分钟
-
----
-
-## 执行明细
-
-| 时间 | # | 改动项 | 结果 |
-|------|---|--------|------|
-| 14:01 | 1 | 新增日志记录参数 | ✅ 已完成 |
-| 14:03 | 2 | 参数结构新增logId | ✅ 已完成 |
-| 14:05 | 3 | 调用时传递logId | ✅ 已完成 |
-| 14:08 | 4 | 新增测试用例 | ✅ 已完成 |
-
----
-
-## 遗留事项
-
-无
-```
-
----
-
-#### 4. 可执行代码文档
-
-**文件：** `IMPLEMENTATION_GUIDE.md`
-
-**用途：** AI 执行代码实现的核心依据，防止偏差
-
-**关键要素（必须包含）：**
-- **精确位置** — 文件路径 + 函数名 + 行号
-- **改动前代码** — 原始代码片段（完整上下文）
-- **改动后代码** — 目标代码片段（完整上下文）
-- **具体步骤** — 每一步操作指令
-- **验证方法** — 如何确认改动正确
 
 **AI 执行要求：**
-- Read 文档后，必须对比改动前代码与当前文件代码是否一致
-- 按"具体步骤"逐条执行，不跳步、不漏步
-- 执行后按"验证方法"确认结果
-
-```markdown
-# 实现指南
-
-本文档包含所有改动项的完整实现细节，可按文档重新实现。
+- 执行改动前，先阅读"上游调用方"和"下游依赖"
+- 确认改动参数时，下游已同步
+- 确认改动返回值时，上游已适配
+```
 
 ---
 
-## #1 新增日志记录参数
+#### 3. 执行记录（JSON）
 
-**位置：** `src/pay/scan_controller.ts:handleScan() 第20行`
+**文件：** `EXECUTION_LOG.json`
 
-**改动前代码：**
-```pseudo
-function {函数名}({参数}) {
-    {校验逻辑}
-    {处理逻辑}
-    return {返回值}
+**用途：** AI 回溯执行状态，JSON 格式确保字段不漏
+
+**JSON Schema：**
+
+```json
+{
+  "execution_log": {
+    "session_id": "{YYYY-MM-DD-HH-MM}",
+    "total_items": 4,
+    "completed_items": 4,
+    "blocked_items": 0,
+    "duration_minutes": 15,
+    "items": [
+      {
+        "id": 1,
+        "start_time": "{HH:MM}",
+        "end_time": "{HH:MM}",
+        "result": "已完成|阻塞|跳过",
+        "error_message": {错误信息或null},
+        "rollback_needed": false
+      }
+    ],
+    "pending_items": [],
+    "blocked_reasons": []
+  }
 }
 ```
 
-**改动后代码：**
-```pseudo
-function {函数名}({参数}) {
-    {校验逻辑}
-    {新增逻辑}  // ← 新增
-    {处理逻辑}
-    return {返回值}
-}
-```
-
-**具体步骤：**
-1. 在 `{校验逻辑}` 后插入一行
-2. 新增 `{新增逻辑}`
-3. 确认不影响原有逻辑
-
-**验证方法：**
-- 运行项目测试，确认测试通过
-- 手动调用，确认新逻辑生效
+**AI 执行要求：**
+- 执行过程中实时更新 `items[].result`
+- 阻塞时填写 `error_message`
+- 如果需要回滚，设置 `rollback_needed: true`
 
 ---
 
-## #2 参数结构新增 logId
+#### 4. 可执行代码指南（JSON）
 
-**位置：** `{文件路径}:{数据结构名}`
+**文件：** `IMPLEMENTATION_GUIDE.json`
 
-**改动前代码：**
-```pseudo
-struct/interface/class {数据结构名} {
-    {字段1}: {类型1}
-    {字段2}: {类型2}
-    {字段3}: {类型3}
+**用途：** AI 执行代码实现的**核心依据**，JSON 格式确保字段齐全、不漏步骤
+
+**这是最关键的文档，必须包含：**
+- 精确位置（文件路径、函数名、行号）
+- 改动前代码（完整上下文）
+- 改动后代码（完整上下文）
+- 具体步骤（数组，不漏任何一步）
+- 验证方法（数组）
+
+**JSON Schema：**
+
+```json
+{
+  "implementation_guide": {
+    "items": [
+      {
+        "id": 1,
+        "description": "{改动项描述}",
+        "location": {
+          "file": "{文件路径}",
+          "function": "{函数名}",
+          "line": {行号}
+        },
+        "change_type": "新增|修改|删除",
+        "before_code": "{改动前的完整代码片段}",
+        "after_code": "{改动后的完整代码片段}",
+        "diff_context": "{改动位置的上下文：前后各5行代码}",
+        "steps": [
+          "{步骤1：具体操作}",
+          "{步骤2：具体操作}",
+          "{步骤3：具体操作}"
+        ],
+        "verify_methods": [
+          "{验证方法1}",
+          "{验证方法2}"
+        ],
+        "risks": [
+          "{潜在风险1}",
+          "{潜在风险2}"
+        ],
+        "rollback_steps": [
+          "{回滚步骤1}",
+          "{回滚步骤2}"
+        ]
+      }
+    ]
+  }
 }
 ```
 
-**改动后代码：**
-```pseudo
-struct/interface/class {数据结构名} {
-    {字段1}: {类型1}
-    {字段2}: {类型2}
-    {字段3}: {类型3}
-    {新增字段}: {类型}  // ← 新增：{用途说明}
-}
-```
+**字段说明：**
 
-**具体步骤：**
-1. 在 `{数据结构名}` 最后新增一行
-2. 字段名：`{新增字段}`，类型：`{类型}`
-3. 添加注释说明用途
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `id` | ✓ | 改动项ID，对应 CHANGELOG.json |
+| `location.file` | ✓ | 文件路径（相对路径或绝对路径） |
+| `location.function` | ✓ | 函数名 |
+| `location.line` | ✓ | 行号（精确插入位置） |
+| `before_code` | ✓ | 改动前的完整代码（包含上下文，不少于5行） |
+| `after_code` | ✓ | 改动后的完整代码（包含上下文，不少于5行） |
+| `diff_context` | ✓ | 改动位置的上下文（前后各5行，用于定位） |
+| `steps` | ✓ | 具体操作步骤数组（每一步必须明确） |
+| `verify_methods` | ✓ | 验证方法数组 |
+| `risks` | ○ | 潜在风险数组（可选） |
+| `rollback_steps` | ○ | 回滚步骤数组（可选） |
 
-**验证方法：**
-- 编译无错误
-- 下游调用方已适配
+**AI 执行要求（严格执行）：**
 
----
+1. **定位代码**
+   - Read `location.file`
+   - 找到 `location.function`，定位到 `location.line`
+   - 对比 `before_code` 与当前文件代码是否一致
+   - 如果不一致，停止执行，询问用户
 
-## #3 调用时传递 logId
+2. **执行改动**
+   - 按 `steps` 数组顺序执行，不跳步、不漏步
+   - 每执行一步，确认无误后继续
 
-**位置：** `{调用方文件}:{调用方函数}`
+3. **验证结果**
+   - 按 `verify_methods` 数组验证
+   - 所有验证通过后，更新 EXECUTION_LOG.json
 
-**改动前代码：**
-```pseudo
-{路由/入口函数}({请求}) {
-    {构建请求对象} = {
-        {字段1}: {来源1},
-        {字段2}: {来源2},
-        {字段3}: {来源3}
-    }
-    {调用目标函数}({请求对象})
-    {返回结果}
-}
-```
-
-**改动后代码：**
-```pseudo
-{路由/入口函数}({请求}) {
-    {新增变量} = {生成逻辑}  // ← 新增
-    {构建请求对象} = {
-        {字段1}: {来源1},
-        {字段2}: {来源2},
-        {字段3}: {来源3},
-        {新增字段}: {新增变量}  // ← 新增
-    }
-    {调用目标函数}({请求对象})
-    {返回结果}
-}
-```
-
-**具体步骤：**
-1. 在 `{构建请求对象}` 前生成 `{新增变量}`
-2. 将 `{新增字段}` 加入 `{请求对象}`
-3. 确认 `{生成逻辑}` 函数已存在（如不存在需新增）
-
-**验证方法：**
-- 调用接口，确认返回结果包含 `{新增字段}`
-- 确认新增逻辑正确执行
-
----
-
-## #4 新增测试用例
-
-**位置：** `{测试文件}`
-
-**新增代码：**
-```pseudo
-{测试框架}('{测试场景}', () => {
-    {测试函数}('{测试描述}', () => {
-        {构造测试数据} = {
-            {字段1}: {测试值1},
-            {字段2}: {测试值2},
-            {新增字段}: {测试值}
-        }
-        {执行测试}({测试数据})
-        {断言结果正确}
-        {断言新增逻辑正确}  // ← 新增验证
-    })
-})
-```
-
-**具体步骤：**
-1. 新增 `{测试框架} block`
-2. 构造带 `{新增字段}` 的测试数据
-3. 验证返回结果正确
-4. 验证新增逻辑正确
-
-**验证方法：**
-- 项目测试全部通过
-```
+4. **遇到问题**
+   - 停止执行，填写 `error_message`
+   - 如果需要回滚，按 `rollback_steps` 执行
 
 ---
 
@@ -570,32 +473,41 @@ struct/interface/class {数据结构名} {
 
 ```
 docs/iteration-{YYYY-MM-DD}/
-├── CHANGELOG.md          # 改动清单（AI 定位所有改动项）
-├── IMPACT_ANALYSIS.md    # 影响范围分析（AI 理解依赖关系）
-├── EXECUTION_LOG.md      # 执行记录（AI 回溯执行状态）
-└── IMPLEMENTATION_GUIDE.md # 可执行代码文档（AI 执行核心依据）
+├── CHANGELOG.json          # 改动清单（JSON，AI定位）
+├── IMPLEMENTATION_GUIDE.json # 可执行代码指南（JSON，AI执行核心依据）
+├── IMPACT_ANALYSIS.md      # 影响范围分析（Markdown，人类和AI都能看）
+└── EXECUTION_LOG.json      # 执行记录（JSON，AI回溯状态）
 ```
 
 **多模块/多业务线时：**
 
-如果涉及多个模块或业务线，文档按模块分开（根据项目实际命名）：
-
 ```
 docs/iteration-{YYYY-MM-DD}/
-├── CHANGELOG.md          # 总览清单
+├── CHANGELOG.json          # 总览清单（包含所有模块的改动项）
 ├── {模块名1}/
+│   ├── IMPLEMENTATION_GUIDE.json
 │   ├── IMPACT_ANALYSIS.md
-│   ├── IMPLEMENTATION_GUIDE.md
-│   └── EXECUTION_LOG.md
+│   └── EXECUTION_LOG.json
 ├── {模块名2}/
+│   ├── IMPLEMENTATION_GUIDE.json
 │   ├── IMPACT_ANALYSIS.md
-│   ├── IMPLEMENTATION_GUIDE.md
-│   └── EXECUTION_LOG.md
+│   └── EXECUTION_LOG.json
 └── {模块名3}/
+    ├── IMPLEMENTATION_GUIDE.json
     ├── IMPACT_ANALYSIS.md
-    ├── IMPLEMENTATION_GUIDE.md
-    └── EXECUTION_LOG.md
+    └── EXECUTION_LOG.json
 ```
+
+---
+
+## JSON vs Markdown 使用原则
+
+| 场景 | 用 JSON | 用 Markdown |
+|------|---------|-------------|
+| AI 需要精确解析 | ✓ 改动清单、执行依据、执行记录 | ✗ |
+| 需要展示代码块 | ✗ 转义麻烦，难以阅读 | ✓ 影响范围分析 |
+| 字段必须齐全 | ✓ JSON 缺字段会报错 | ✗ |
+| 人类直接阅读 | ✗ 需要渲染 | ✓ |
 
 ---
 

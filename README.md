@@ -43,28 +43,55 @@ Step 7: 输出文档
 
 **文档目的：给 AI 执行用，防止代码实现偏差**
 
+**混合格式方案：JSON 用于精确解析，Markdown 用于人类阅读**
+
 执行结束后生成到 `docs/iteration-{日期}/`：
 
-| 文件 | 用途 |
-|------|------|
-| `CHANGELOG.md` | AI 定位所有改动项 |
-| `IMPACT_ANALYSIS.md` | AI 理解代码结构和依赖关系 |
-| `EXECUTION_LOG.md` | AI 回溯执行状态 |
-| `IMPLEMENTATION_GUIDE.md` | AI 执行核心依据（精确位置+改动前后代码） |
+| 文件 | 格式 | 用途 |
+|------|------|------|
+| `CHANGELOG.json` | JSON | AI 定位改动项，字段精确，解析不出错 |
+| `IMPLEMENTATION_GUIDE.json` | JSON | AI 执行核心依据（改动前后代码对比 + 具体步骤） |
+| `IMPACT_ANALYSIS.md` | Markdown | 代码结构说明，人类和 AI 都能看 |
+| `EXECUTION_LOG.json` | JSON | 执行状态追溯，字段精确 |
+
+**为什么用 JSON？**
+
+| 风险 | Markdown | JSON |
+|------|----------|------|
+| 漏字段 | 表格解析可能漏 | JSON 缺字段会报错 |
+| 位置不精确 | 字符串匹配可能偏差 | 字段直接存路径/行号 |
+| 执行顺序混乱 | 列表可能跳项 | 数组顺序固定 |
+
+**IMPLEMENTATION_GUIDE.json 核心字段：**
+
+```json
+{
+  "id": 1,
+  "location": {
+    "file": "scan_controller.ts",
+    "function": "handleScan",
+    "line": 20
+  },
+  "before_code": "改动前完整代码...",
+  "after_code": "改动后完整代码...",
+  "steps": ["步骤1", "步骤2", "步骤3"],
+  "verify_methods": ["验证方法1", "验证方法2"]
+}
+```
 
 **多模块/多业务线时：**
 
-文档按模块分开，每个模块独立子目录（根据项目实际命名）：
-
 ```
 docs/iteration-{日期}/
-├── CHANGELOG.md      # 总览清单
+├── CHANGELOG.json          # 总览清单（JSON）
 ├── {模块名1}/
+│   ├── IMPLEMENTATION_GUIDE.json
 │   ├── IMPACT_ANALYSIS.md
-│   ├── IMPLEMENTATION_GUIDE.md
+│   └── EXECUTION_LOG.json
 ├── {模块名2}/
+│   ├── IMPLEMENTATION_GUIDE.json
 │   ├── IMPACT_ANALYSIS.md
-│   ├── IMPLEMENTATION_GUIDE.md
+│   └── EXECUTION_LOG.json
 ```
 
 ## 安装

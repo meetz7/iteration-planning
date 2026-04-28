@@ -1,6 +1,6 @@
 ---
 name: iteration-planning
-description: 处理清晰方向的迭代改动。当用户说"我有一堆改动要做"、"帮我整理改动清单"、"这些改动帮我梳理一下"、"xx接口里改动xxx"时使用。也适用于：方向清晰但细节待细化、改动琐碎数量多、需要清单化执行、需要分析影响范围、需要输出执行文档的场景。不要用于完全模糊需求（那种用 brainstorming）或单一简单改动。
+description: 处理清晰方向的迭代改动。当用户说"我有一堆改动要做"、"帮我整理改动清单"、"这些改动帮我梳理一下"、"某个模块/接口改动xxx"时使用。也适用于：方向清晰但细节待细化、改动琐碎数量多、涉及多个模块或业务线、需要清单化执行、需要分析影响范围、需要输出执行文档的场景。不要用于完全模糊需求（那种用 brainstorming）或单一简单改动。
 ---
 
 # Iteration Planning
@@ -123,25 +123,42 @@ scan_controller → scan_service → payment_gateway
 
 把改动项整理成结构化清单：
 
+**多模块/多业务线自动分类：**
+
+按模块或业务线自动分组，每组标注依赖关系：
+
 ```markdown
 ## 改动清单
 
-### 模块A（依赖：无）
+### 支付模块（依赖：无）
 | # | 改动项 | 类型 | 位置 | 状态 |
 |---|--------|------|------|------|
 | 1 | 新增日志记录参数 | 新增 | scan_controller.ts:handleScan():20 | 待执行 |
 
-### 模块B（依赖：模块A完成）
+### 订单模块（依赖：支付模块完成）
 | # | 改动项 | 类型 | 位置 | 状态 |
 |---|--------|------|------|------|
-| 2 | 参数结构新增logId | 修改 | scan_service.ts:process() | 待执行 |
-| 3 | 调用时传递logId | 修改 | api/routes.ts:scanRoute() | 待执行 |
+| 2 | 订单状态同步 | 修改 | order_service.ts:updateStatus() | 待执行 |
+
+### 用户模块（依赖：无）
+| # | 改动项 | 类型 | 位置 | 状态 |
+|---|--------|------|------|------|
+| 3 | 用户积分更新 | 新增 | user_service.ts:addPoints() | 待执行 |
 ```
 
 **排序规则：**
-- 无依赖 → 排前面
-- 有依赖 → 排后面
+- 按模块/业务线分组
+- 无依赖的模块 → 排前面，可并行执行
+- 有依赖的模块 → 排后面，等待前置模块
 - 同模块内：底层 → 上层
+
+**并行执行提示：**
+
+如果多个模块无依赖关系，标注可并行：
+```
+支付模块 + 用户模块 → 无依赖，可并行执行
+订单模块 → 依赖支付模块，需等待
+```
 
 ### Step 5: 确认清单
 
@@ -189,13 +206,23 @@ scan_controller → scan_service → payment_gateway
 
 ### Step 7: 输出文档
 
-执行结束后，生成 4 类文档到项目目录（如 `docs/iteration-{date}/`）：
+**文档目的：给 AI 执行用，防止代码实现偏差**
+
+执行结束后，生成结构化文档到项目目录（如 `docs/iteration-{date}/`）。
+
+文档特点：
+- **精确性** — 文件路径、函数名、行号精确标注
+- **结构化** — 表格形式，便于 AI 解析
+- **可执行性** — 包含改动前后代码对比，按文档可精确复现
+- **完整性** — 覆盖所有改动项，无遗漏
 
 ---
 
 #### 1. 改动清单文档
 
 **文件：** `CHANGELOG.md`
+
+**用途：** AI 快速定位所有改动项，按清单逐项执行
 
 **内容：**
 ```markdown
@@ -228,6 +255,14 @@ scan_controller → scan_service → payment_gateway
 #### 2. 影响范围分析文档
 
 **文件：** `IMPACT_ANALYSIS.md`
+
+**用途：** AI 理解代码结构和依赖关系，确保改动不遗漏调用方
+
+**关键信息（AI 必读）：**
+- 调用链路径（从入口到底层）
+- 上游调用方列表（改动返回值需同步）
+- 下游依赖列表（改动参数需同步）
+- 边界条件（异常处理、并发场景）
 
 **内容：**
 ```markdown
@@ -326,6 +361,8 @@ interface ScanRequest {
 
 **文件：** `EXECUTION_LOG.md`
 
+**用途：** AI 回溯执行状态，确认哪些已完成、哪些阻塞
+
 **内容：**
 ```markdown
 # 执行记录
@@ -360,7 +397,19 @@ interface ScanRequest {
 
 **文件：** `IMPLEMENTATION_GUIDE.md`
 
-**内容：** 足够详细，按文档可重新实现
+**用途：** AI 执行代码实现的核心依据，防止偏差
+
+**关键要素（必须包含）：**
+- **精确位置** — 文件路径 + 函数名 + 行号
+- **改动前代码** — 原始代码片段（完整上下文）
+- **改动后代码** — 目标代码片段（完整上下文）
+- **具体步骤** — 每一步操作指令
+- **验证方法** — 如何确认改动正确
+
+**AI 执行要求：**
+- Read 文档后，必须对比改动前代码与当前文件代码是否一致
+- 按"具体步骤"逐条执行，不跳步、不漏步
+- 执行后按"验证方法"确认结果
 
 ```markdown
 # 实现指南
@@ -522,10 +571,31 @@ describe('handleScan with logId', () => {
 
 ```
 docs/iteration-{YYYY-MM-DD}/
-├── CHANGELOG.md          # 改动清单
-├── IMPACT_ANALYSIS.md    # 影响范围分析 + 改动前后代码对比
-├── EXECUTION_LOG.md      # 执行记录
-└── IMPLEMENTATION_GUIDE.md # 可执行代码文档（按文档可重新实现）
+├── CHANGELOG.md          # 改动清单（AI 定位所有改动项）
+├── IMPACT_ANALYSIS.md    # 影响范围分析（AI 理解依赖关系）
+├── EXECUTION_LOG.md      # 执行记录（AI 回溯执行状态）
+└── IMPLEMENTATION_GUIDE.md # 可执行代码文档（AI 执行核心依据）
+```
+
+**多模块/多业务线时：**
+
+如果涉及多个模块或业务线，文档按模块分开：
+
+```
+docs/iteration-{YYYY-MM-DD}/
+├── CHANGELOG.md          # 总览清单
+├── 支付模块/
+│   ├── IMPACT_ANALYSIS.md
+│   ├── IMPLEMENTATION_GUIDE.md
+│   └── EXECUTION_LOG.md
+├── 订单模块/
+│   ├── IMPACT_ANALYSIS.md
+│   ├── IMPLEMENTATION_GUIDE.md
+│   └── EXECUTION_LOG.md
+└── 用户模块/
+    ├── IMPACT_ANALYSIS.md
+    ├── IMPLEMENTATION_GUIDE.md
+    └── EXECUTION_LOG.md
 ```
 
 ---

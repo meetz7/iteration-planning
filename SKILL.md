@@ -323,39 +323,39 @@ api/routes.ts:scanRoute()
 
 ## 改动后代码说明
 
-### handleScan() 改动后
+### {函数名}() 改动后
 
-```typescript
+```pseudo
 // 改动前
-function handleScan(req: ScanRequest): ScanResponse {
-  const result = scanService.process(req);
-  return result;
+function {函数名}({参数}) {
+    {原有逻辑}
+    return {返回值}
 }
 
 // 改动后
-function handleScan(req: ScanRequest): ScanResponse {
-  logger.info({ logId: req.logId, merchantId: req.merchantId }, "scan request received");
-  const result = scanService.process(req);
-  return result;
+function {函数名}({参数}) {
+    {新增逻辑}  // ← 新增
+    {原有逻辑}
+    return {返回值}
 }
 ```
 
-### ScanRequest 改动后
+### {数据结构} 改动后
 
-```typescript
+```pseudo
 // 改动前
-interface ScanRequest {
-  merchantId: string;
-  amount: number;
-  deviceId: string;
+struct/interface/class {数据结构名} {
+    {字段1}
+    {字段2}
+    {字段3}
 }
 
 // 改动后
-interface ScanRequest {
-  merchantId: string;
-  amount: number;
-  deviceId: string;
-  logId: string; // 新增
+struct/interface/class {数据结构名} {
+    {字段1}
+    {字段2}
+    {字段3}
+    {新增字段}  // ← 新增
 }
 ```
 ```
@@ -428,146 +428,140 @@ interface ScanRequest {
 **位置：** `src/pay/scan_controller.ts:handleScan() 第20行`
 
 **改动前代码：**
-```typescript
-function handleScan(req: ScanRequest): ScanResponse {
-  validateRequest(req);
-  const result = scanService.process(req);
-  return result;
+```pseudo
+function {函数名}({参数}) {
+    {校验逻辑}
+    {处理逻辑}
+    return {返回值}
 }
 ```
 
 **改动后代码：**
-```typescript
-function handleScan(req: ScanRequest): ScanResponse {
-  validateRequest(req);
-  logger.info({ logId: req.logId, merchantId: req.merchantId }, "scan request received");
-  const result = scanService.process(req);
-  return result;
+```pseudo
+function {函数名}({参数}) {
+    {校验逻辑}
+    {新增逻辑}  // ← 新增
+    {处理逻辑}
+    return {返回值}
 }
 ```
 
 **具体步骤：**
-1. 在 `validateRequest(req)` 后插入一行
-2. 使用 `logger.info()` 记录日志
-3. 日志内容：`{ logId, merchantId }`
-4. 日志消息：`"scan request received"`
+1. 在 `{校验逻辑}` 后插入一行
+2. 新增 `{新增逻辑}`
+3. 确认不影响原有逻辑
 
 **验证方法：**
-- 运行 `npm test`，确认测试通过
-- 手动调用接口，确认日志输出正确
+- 运行项目测试，确认测试通过
+- 手动调用，确认新逻辑生效
 
 ---
 
 ## #2 参数结构新增 logId
 
-**位置：** `src/pay/scan_service.ts:ScanRequest interface`
+**位置：** `{文件路径}:{数据结构名}`
 
 **改动前代码：**
-```typescript
-interface ScanRequest {
-  merchantId: string;
-  amount: number;
-  deviceId: string;
+```pseudo
+struct/interface/class {数据结构名} {
+    {字段1}: {类型1}
+    {字段2}: {类型2}
+    {字段3}: {类型3}
 }
 ```
 
 **改动后代码：**
-```typescript
-interface ScanRequest {
-  merchantId: string;
-  amount: number;
-  deviceId: string;
-  logId: string; // 新增：日志追踪ID
+```pseudo
+struct/interface/class {数据结构名} {
+    {字段1}: {类型1}
+    {字段2}: {类型2}
+    {字段3}: {类型3}
+    {新增字段}: {类型}  // ← 新增：{用途说明}
 }
 ```
 
 **具体步骤：**
-1. 在 `ScanRequest` interface 最后新增一行
-2. 字段名：`logId`，类型：`string`
+1. 在 `{数据结构名}` 最后新增一行
+2. 字段名：`{新增字段}`，类型：`{类型}`
 3. 添加注释说明用途
 
 **验证方法：**
-- TypeScript 编译无错误
+- 编译无错误
 - 下游调用方已适配
 
 ---
 
 ## #3 调用时传递 logId
 
-**位置：** `api/routes.ts:scanRoute()`
+**位置：** `{调用方文件}:{调用方函数}`
 
 **改动前代码：**
-```typescript
-router.post('/scan', (req, res) => {
-  const scanReq = {
-    merchantId: req.body.merchantId,
-    amount: req.body.amount,
-    deviceId: req.body.deviceId
-  };
-  const result = handleScan(scanReq);
-  res.json(result);
-});
+```pseudo
+{路由/入口函数}({请求}) {
+    {构建请求对象} = {
+        {字段1}: {来源1},
+        {字段2}: {来源2},
+        {字段3}: {来源3}
+    }
+    {调用目标函数}({请求对象})
+    {返回结果}
+}
 ```
 
 **改动后代码：**
-```typescript
-router.post('/scan', (req, res) => {
-  const logId = generateLogId(); // 新增
-  const scanReq = {
-    merchantId: req.body.merchantId,
-    amount: req.body.amount,
-    deviceId: req.body.deviceId,
-    logId // 新增
-  };
-  const result = handleScan(scanReq);
-  res.json(result);
-});
+```pseudo
+{路由/入口函数}({请求}) {
+    {新增变量} = {生成逻辑}  // ← 新增
+    {构建请求对象} = {
+        {字段1}: {来源1},
+        {字段2}: {来源2},
+        {字段3}: {来源3},
+        {新增字段}: {新增变量}  // ← 新增
+    }
+    {调用目标函数}({请求对象})
+    {返回结果}
+}
 ```
 
 **具体步骤：**
-1. 在 `scanReq` 构建前调用 `generateLogId()` 生成 logId
-2. 将 `logId` 加入 `scanReq` 对象
-3. 确认 `generateLogId()` 函数已存在（如不存在需新增）
+1. 在 `{构建请求对象}` 前生成 `{新增变量}`
+2. 将 `{新增字段}` 加入 `{请求对象}`
+3. 确认 `{生成逻辑}` 函数已存在（如不存在需新增）
 
 **验证方法：**
-- 调用接口，确认返回结果包含 logId
-- 日志中 logId 与请求一致
+- 调用接口，确认返回结果包含 `{新增字段}`
+- 确认新增逻辑正确执行
 
 ---
 
 ## #4 新增测试用例
 
-**位置：** `tests/scan_controller_test.ts`
+**位置：** `{测试文件}`
 
 **新增代码：**
-```typescript
-describe('handleScan with logId', () => {
-  it('should log request with logId', () => {
-    const req = {
-      merchantId: 'M001',
-      amount: 100,
-      deviceId: 'D001',
-      logId: 'LOG-001'
-    };
-    const result = handleScan(req);
-    expect(result.status).toBe('success');
-    // 验证日志输出
-    expect(logger.info).toHaveBeenCalledWith(
-      { logId: 'LOG-001', merchantId: 'M001' },
-      'scan request received'
-    );
-  });
-});
+```pseudo
+{测试框架}('{测试场景}', () => {
+    {测试函数}('{测试描述}', () => {
+        {构造测试数据} = {
+            {字段1}: {测试值1},
+            {字段2}: {测试值2},
+            {新增字段}: {测试值}
+        }
+        {执行测试}({测试数据})
+        {断言结果正确}
+        {断言新增逻辑正确}  // ← 新增验证
+    })
+})
 ```
 
 **具体步骤：**
-1. 新增 describe block
-2. 构造带 logId 的测试请求
+1. 新增 `{测试框架} block`
+2. 构造带 `{新增字段}` 的测试数据
 3. 验证返回结果正确
-4. 验证日志输出正确
+4. 验证新增逻辑正确
 
 **验证方法：**
-- `npm test` 全部通过
+- 项目测试全部通过
 ```
 
 ---
